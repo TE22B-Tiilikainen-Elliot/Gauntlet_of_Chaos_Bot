@@ -78,19 +78,19 @@ class BattleStatsBot(discord.Client):
             # Font setup (try modern fonts first)
             try:
                 title_font = ImageFont.truetype("Inter-Bold.ttf", 42)
-                player_font = ImageFont.truetype("Inter-SemiBold.ttf", 28)
-                stat_font = ImageFont.truetype("Inter-Regular.ttf", 24)
+                player_font = ImageFont.truetype("Inter-SemiBold.ttf", 32)
+                stat_font = ImageFont.truetype("Inter-Regular.ttf", 28)
             except:
                 # Fallback to Arial if Inter is not available
                 try:
                     title_font = ImageFont.truetype("arialbd.ttf", 42)
-                    player_font = ImageFont.truetype("arialbd.ttf", 28)
-                    stat_font = ImageFont.truetype("arial.ttf", 24)
+                    player_font = ImageFont.truetype("arialbd.ttf", 32)
+                    stat_font = ImageFont.truetype("arial.ttf", 28)
                 except:
                     # Final fallback to default font
                     title_font = ImageFont.load_default(42)
-                    player_font = ImageFont.load_default(28)
-                    stat_font = ImageFont.load_default(24)
+                    player_font = ImageFont.load_default(32)
+                    stat_font = ImageFont.load_default(28)
 
             # Title
             title = "Gauntlet of Chaos"
@@ -141,7 +141,8 @@ class BattleStatsBot(discord.Client):
                         'team': player.get('Team', '').lower(),
                         'roll': player.get('Roll', ''),
                         'status': player.get('Status', ''),
-                        'points': leaderboard.get(player.get('Name', '').lower(), {}).get('points', 0)
+                        'points': leaderboard.get(player.get('Name', '').lower(), {}).get('points', 0),
+                        'Chaos coins': player.get('Chaos coins', '0')
                     }
                     all_players.append(player_data)
 
@@ -151,6 +152,7 @@ class BattleStatsBot(discord.Client):
             # Draw player cards
             for i, player in enumerate(all_players[:16]):  # Limit to top 16
                 # Card background
+                card_width = 700
                 card_height = 120
                 card_x = (width - card_width) // 2
                 card_y = y_position
@@ -170,31 +172,45 @@ class BattleStatsBot(discord.Client):
                 # Position indicator
                 position = f"{i+1}."
                 position_color = (255, 215, 0) if i < 3 else (220, 220, 220)  # Gold for top 3
-                draw.text((card_x + 25, card_y + 25), position, fill=position_color, font=player_font)
+                position_bbox = draw.textbbox((0, 0), position, font=player_font)
+                position_x = card_x + 25  # 25px from left edge
+                position_y = card_y + (card_height // 2) - (position_bbox[3] // 2)  # Vertically centered
+                draw.text((position_x, position_y), position, fill=position_color, font=player_font)
 
-                # Player name
+                # 1. Player Name (x=0, y=ymax/2 -> middle-left)
                 team_color = team_colors.get(player['team'], (220, 220, 220))
-                draw.text((card_x + 80, card_y + 25), player['name'], fill=team_color, font=player_font)
+                name_bbox = draw.textbbox((0, 0), player['name'], font=player_font)
+                name_x = position_x + position_bbox[2] + 15  # 15px after position number
+                name_y = card_y + (card_height // 2) - (name_bbox[3] // 2)  # Vertically centered
+                draw.text((name_x, name_y), player['name'], fill=team_color, font=player_font)
 
+                # Chaos Coin info
+                coins_text = f"Chaos Coins: {player.get('Chaos coins', '0')}"
+                coins_bbox = draw.textbbox((0, 0), coins_text, font=stat_font)
+                coins_x = card_x + card_width - coins_bbox[2] - 20  # 20px padding from right
+                coins_y = card_y + card_height - coins_bbox[3] - 10  # 10px padding from bottom
+                draw.text((coins_x, coins_y), coins_text, fill=(180, 180, 180), font=stat_font)
 
-
-                # Roll info
-                draw.text((card_x + 250, card_y + 60), f"Roll: {player['roll']}", 
-                         fill=(180, 180, 180), font=stat_font)
+                # 2. Roll Info (x=xmax/2, y=ymax/2 -> absolute center)
+                roll_text = f"Roll: {player['roll']}"
+                roll_bbox = draw.textbbox((0, 0), roll_text, font=stat_font)
+                roll_x = card_x + (card_width // 2) - (roll_bbox[2] // 2)
+                roll_y = card_y + (card_height // 2) - (roll_bbox[3] // 2)
+                draw.text((roll_x, roll_y), roll_text, fill=(180, 180, 180), font=stat_font)
 
                 # Points
                 points_text = f"Points: {player['points']}"
                 points_bbox = draw.textbbox((0, 0), points_text, font=stat_font)
-                points_w = points_bbox[2] - points_bbox[0]
-                draw.text((card_x + card_width - points_w - 30, card_y + 25), 
-                         points_text, fill=(220, 220, 180), font=stat_font)
+                points_x = card_x + card_width - points_bbox[2] - 20  # 20px padding from right
+                points_y = card_y + 10  # 10px padding from top
+                draw.text((points_x, points_y), points_text, fill=(220, 220, 180), font=stat_font)
 
-                # Status effect if available
+                # Status effect if available - now in bottom left corner
                 if player['status']:
                     status_text = f"Affliction: {player['status']}"
                     status_bbox = draw.textbbox((0, 0), status_text, font=stat_font)
-                    status_w = status_bbox[2] - status_bbox[0]
-                    draw.text((card_x + card_width - status_w - 30, card_y + 60), 
+                    # Position at bottom left with 20px padding from left and 10px from bottom
+                    draw.text((card_x + 20, card_y + card_height - status_bbox[3] - 10), 
                              status_text, fill=(180, 220, 240), font=stat_font)
 
                 y_position += card_height + card_margin
@@ -251,6 +267,7 @@ class BattleStatsBot(discord.Client):
                         'Name': row[0].strip(),
                         'Team': team,
                         'Roll': row[2].strip() if len(row) > 2 else "",
+                        'Chaos coins': row[3].strip() if len(row) > 3 else "0",
                         'Status': row[4].strip() if len(row) > 4 and row[4] else ""
                     }
 
@@ -265,6 +282,7 @@ class BattleStatsBot(discord.Client):
                         'Name': row[0].strip(),
                         'Team': team,
                         'Roll': row[2].strip() if len(row) > 2 else "",
+                        'Chaos coins': row[3].strip() if len(row) > 3 else "0",
                         'Status': row[4].strip() if len(row) > 4 and row[4] else ""
                     }
 
