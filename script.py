@@ -41,13 +41,14 @@ class BattleStatsBot(discord.Client):
     async def setup_hook(self):
         try:
             spreadsheet = client.open("Gauntlet 3 Player Stats")
-            self.sheet = spreadsheet.worksheet("Round 1")
+
+            # First get the config sheet
             self.config_sheet = spreadsheet.worksheet("Config")
 
             # Get all values from the Config sheet (vertical format)
             config_values = self.config_sheet.get_all_values()
 
-            # Convert to dictionary {message_id: x, channel_id: y}
+            # Convert to dictionary {message_id: x, channel_id: y, current_round: z}
             config_dict = {}
             for row in config_values:
                 if len(row) >= 2:  # Ensure there's a key and value
@@ -59,11 +60,22 @@ class BattleStatsBot(discord.Client):
             self.message_id = int(config_dict.get('message_id')) if config_dict.get('message_id', '').isdigit() else None
             self.channel_id = int(config_dict.get('channel_id')) if config_dict.get('channel_id', '').isdigit() else None
 
+            # Get the current round (default to 1 if not specified)
+            current_round = int(config_dict.get('current_round', '1'))
+
+            # Set the worksheet for the current round
+            self.sheet = spreadsheet.worksheet(f"Round {current_round}")
+
         except Exception as e:
             print(f"Error in setup_hook: {e}")
             traceback.print_exc()
             self.message_id = None
             self.channel_id = None
+            # Try to fall back to Round 1 if possible
+            try:
+                self.sheet = spreadsheet.worksheet("Round 1")
+            except:
+                self.sheet = None
 
     async def generate_scoreboard_image(self, data):
         try:
@@ -185,7 +197,6 @@ class BattleStatsBot(discord.Client):
                 draw.text((name_x, name_y), player['name'], fill=team_color, font=player_font)
 
                 # Chaos Coin info
-                print(player.get('Chaos coins', '0'))
                 coins_text = f"Chaos Coins: {player.get('Chaos coins', '0')}"
                 coins_bbox = draw.textbbox((0, 0), coins_text, font=stat_font)
                 coins_x = card_x + card_width - coins_bbox[2] - 20  # 20px padding from right
@@ -474,5 +485,57 @@ async def roll_command(interaction: discord.Interaction, team: str = None):
         print(f"Error in roll command: {e}")
         traceback.print_exc()
         await interaction.followup.send("Something went wrong with the roll. Try again later.", ephemeral=True)
+    
+@bot.tree.command(name="round", description="Change the current round being displayed")
+@app_commands.describe(round_number="The round number to switch to")
+async def round_command(interaction: discord.Interaction, round_number: int):
+    """
+    Change the current round being displayed in the stats
+    """
+    try:
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get the spreadsheet
+        spreadsheet = client.open("Gauntlet 3 Player Stats")
+        
+        # Try to access the worksheet for the specified round
+        try:
+            worksheet_name = f"Round {round_number}"
+            worksheet = spreadsheet.worksheet(worksheet_name)
+            
+            # Update the bot's sheet reference
+            bot.sheet = worksheet
+            
+            # Update the config sheet to remember the current round
+            try:
+                # Check if we already have a round row in the config
+                config_values = bot.config_sheet.get_all_values()
+                round_row = -1
+                
+                for i, row in enumerate(config_values):
+                    if row and row[0].strip().lower() == 'current_round':
+                        round_row = i + 1  # +1 because sheets are 1-indexed
+                        break
+                
+                if round_row > 0:
+                    # Update existing row
+                    bot.config_sheet.update(f'A{round_row}', [[ 'current_round', str(round_number) ]])
+                else:
+                    # Add new row
+                    bot.config_sheet.append_row([ 'current_round', str(round_number) ])
+                
+            except Exception as e:
+                print(f"Error updating config sheet with round number: {e}")
+                traceback.print_exc()
+            
+            await interaction.followup.send(f"Switched to Round {round_number}!", ephemeral=True)
+            
+        except gspread.exceptions.WorksheetNotFound:
+            await interaction.followup.send(f"Worksheet 'Round {round_number}' not found in the spreadsheet!", ephemeral=True)
+            
+    except Exception as e:
+        print(f"Error in round command: {e}")
+        traceback.print_exc()
+        await interaction.followup.send("Failed to change rounds. Check logs for details.", ephemeral=True)
 
 bot.run(os.getenv('DISCORD_TOKEN'))
