@@ -185,6 +185,7 @@ class BattleStatsBot(discord.Client):
                 draw.text((name_x, name_y), player['name'], fill=team_color, font=player_font)
 
                 # Chaos Coin info
+                print(player.get('Chaos coins', '0'))
                 coins_text = f"Chaos Coins: {player.get('Chaos coins', '0')}"
                 coins_bbox = draw.textbbox((0, 0), coins_text, font=stat_font)
                 coins_x = card_x + card_width - coins_bbox[2] - 20  # 20px padding from right
@@ -267,7 +268,7 @@ class BattleStatsBot(discord.Client):
                         'Name': row[0].strip(),
                         'Team': team,
                         'Roll': row[2].strip() if len(row) > 2 else "",
-                        'Chaos coins': row[3].strip() if len(row) > 3 else "0",
+                        'Chaos coins': row[3].strip() if len(row) > 3 and row[3].strip() != "" else "0",
                         'Status': row[4].strip() if len(row) > 4 and row[4] else ""
                     }
 
@@ -282,7 +283,7 @@ class BattleStatsBot(discord.Client):
                         'Name': row[0].strip(),
                         'Team': team,
                         'Roll': row[2].strip() if len(row) > 2 else "",
-                        'Chaos coins': row[3].strip() if len(row) > 3 else "0",
+                        'Chaos coins': row[3].strip() if len(row) > 3 and row[3].strip() != "" else "0",
                         'Status': row[4].strip() if len(row) > 4 and row[4] else ""
                     }
 
