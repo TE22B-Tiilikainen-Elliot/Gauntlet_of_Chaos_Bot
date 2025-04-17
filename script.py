@@ -89,10 +89,15 @@ class SheetManager:
     def _update_config(self, key: str, value: str) -> None:
         """Update a configuration value in the sheet"""
         config_values = self.config_sheet.get_all_values()
-        row_index = next((i for i, row in enumerate(config_values) if row and row[0].strip().lower() == key.lower()), -1)
-        
+        row_index = next((i for i, row in enumerate(config_values) 
+                         if row and row[0].strip().lower() == key.lower()), -1)
+
         if row_index >= 0:
-            self.config_sheet.update(f'A{row_index+1}', [[key, value]])
+            # Updated to new argument order
+            self.config_sheet.update(
+                values=[[key, value]],
+                range_name=f'A{row_index+1}'
+            )
         else:
             self.config_sheet.append_row([key, value])
 
