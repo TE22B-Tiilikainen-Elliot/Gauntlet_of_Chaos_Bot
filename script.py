@@ -94,7 +94,6 @@ class SheetManager:
                          if row and row[0].strip().lower() == key.lower()), -1)
 
         if row_index >= 0:
-            # Updated to new argument order
             self.config_sheet.update(
                 values=[[key, value]],
                 range_name=f'A{row_index+1}'
@@ -332,12 +331,22 @@ class BattleStatsBot(discord.Client):
 
 bot = BattleStatsBot()
 
+def is_admin(interaction: discord.Interaction) -> bool:
+    """Check if the user has administrator permissions"""
+    return interaction.user.guild_permissions.administrator
+
 @bot.tree.command(name="update", description="Update the battle stats board")
 async def update_command(interaction: discord.Interaction):
+    if not is_admin(interaction):
+        await interaction.response.send_message("❌ This command is restricted to admins only.", ephemeral=True)
+        return
     await bot.update_stats(interaction)
 
 @bot.tree.command(name="ping", description="Test if the bot is alive")
 async def ping(interaction: discord.Interaction):
+    if not is_admin(interaction):
+        await interaction.response.send_message("❌ This command is restricted to admins only.", ephemeral=True)
+        return
     await interaction.response.send_message("Pong! 🏓")
 
 @bot.tree.command(name="roll", description="Roll for yourself or your entire team")
@@ -404,10 +413,13 @@ async def roll_command(interaction: discord.Interaction, team: str = None):
         print(f"Error in roll command: {e}")
         traceback.print_exc()
         await interaction.followup.send("Something went wrong with the roll. Try again later.", ephemeral=True)
-    
+
 @bot.tree.command(name="round", description="Change the current round being displayed")
 @app_commands.describe(round_number="The round number to switch to")
 async def round_command(interaction: discord.Interaction, round_number: int):
+    if not is_admin(interaction):
+        await interaction.response.send_message("❌ This command is restricted to admins only.", ephemeral=True)
+        return
     try:
         await interaction.response.defer(ephemeral=True)
         bot.sheet_manager.set_round(round_number)
@@ -426,32 +438,32 @@ async def anon_submit(interaction: discord.Interaction, message: str):
     ACTIVE_SUBMISSIONS[interaction.user.id] = message
     await interaction.response.send_message(
         "✅ Your message was submitted anonymously!",
-        ephemeral=True  # Only visible to the command user
+        ephemeral=True
     )
 
 @bot.tree.command(name="showsubmitted", description="Show users who submitted")
 async def show_submitted(interaction: discord.Interaction):
-    """Lists submitters using the same reliable method as showanswers"""
+    if not is_admin(interaction):
+        await interaction.response.send_message("❌ This command is restricted to admins only.", ephemeral=True)
+        return
+    
     if not ACTIVE_SUBMISSIONS:
         await interaction.response.send_message("No submissions yet!", ephemeral=True)
         return
     
     try:
-        # Same user lookup method that works in showanswers
         submitter_info = []
         for user_id in ACTIVE_SUBMISSIONS.keys():
             member = interaction.guild.get_member(user_id)
             if member:
                 submitter_info.append(f"• {member.display_name}")
             else:
-                # Mirror the fallback from showanswers
                 try:
                     user = await bot.fetch_user(user_id)
-                    submitter_info.append(f"• {user.name} (not in server)")
+                    submitter_info.append(f"• {user.name}")
                 except:
                     submitter_info.append(f"• Unknown User ({user_id})")
         
-        # Format exactly like working commands
         response = (
             f"📝 Submitted ({len(submitter_info)}):\n" +
             "\n".join(submitter_info)
@@ -469,11 +481,14 @@ async def show_submitted(interaction: discord.Interaction):
 
 @bot.tree.command(name="showanswers", description="Reveal anonymous messages")
 async def show_anon(interaction: discord.Interaction):
+    if not is_admin(interaction):
+        await interaction.response.send_message("❌ This command is restricted to admins only.", ephemeral=True)
+        return
+    
     if not ACTIVE_SUBMISSIONS:
         await interaction.response.send_message("❌ No submissions yet!", ephemeral=True)
         return
     
-    # 1. Create public anonymous display
     shuffled_messages = list(ACTIVE_SUBMISSIONS.items())
     random.shuffle(shuffled_messages)
     
@@ -482,7 +497,6 @@ async def show_anon(interaction: discord.Interaction):
         for i, (_, msg) in enumerate(shuffled_messages)
     )
     
-    # 2. Create detailed admin log
     admin_log = ["📜 **Author Mapping** 📜"]
     for i, (user_id, msg) in enumerate(shuffled_messages, 1):
         member = interaction.guild.get_member(user_id)
@@ -490,12 +504,11 @@ async def show_anon(interaction: discord.Interaction):
             admin_log.append(f"`{i}.` 👤 {member.display_name}\n   ✉️ {msg}")
         else:
             try:
-                user = await bot.fetch_user(user_id)  # Try global user lookup
+                user = await bot.fetch_user(user_id)
                 admin_log.append(f"`{i}.` 👤 {user.name}\n   ✉️ {msg}")
             except:
                 admin_log.append(f"`{i}.` 👤 Unknown User ({user_id})\n   ✉️ {msg}")
     
-    # 3. Send both versions
     await interaction.response.send_message(public_output)
     await interaction.followup.send(
         "\n".join(admin_log),
