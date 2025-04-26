@@ -20,6 +20,7 @@ SCOPES = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/a
 EMOJIS = {"red": "🔴", "blue": "🔵", "green": "🟢", "yellow": "🟡", "1st": "🥇", "2nd": "🥈", "3rd": "🥉"}
 TEAMS = ['red', 'blue', 'green', 'yellow']
 DEFAULT_ROLL_RANGE = (100, 200)
+ACTIVE_SUBMISSIONS = {}
 
 # Initialize Google Sheets client
 creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', SCOPES)
@@ -417,5 +418,64 @@ async def round_command(interaction: discord.Interaction, round_number: int):
         print(f"Error in round command: {e}")
         traceback.print_exc()
         await interaction.followup.send("Failed to change rounds. Check logs for details.", ephemeral=True)
+
+@bot.tree.command(name="answer", description="Submit an anonymous message")
+@app_commands.describe(message="Your anonymous message")
+async def anon_submit(interaction: discord.Interaction, message: str):
+    """Handles anonymous submissions with in-channel confirmation"""
+    ACTIVE_SUBMISSIONS[interaction.user.id] = message
+    await interaction.response.send_message(
+        "✅ Your message was submitted anonymously!",
+        ephemeral=True  # Only visible to the command user
+    )
+
+@bot.tree.command(name="showsubmitted", description="Show who submitted")
+async def show_submitted(interaction: discord.Interaction):
+    """Working version that properly lists submitters"""
+    try:
+        submitters = []
+        for user_id in ACTIVE_SUBMISSIONS.keys():
+            member = interaction.guild.get_member(user_id)
+            if member is not None:  # User exists in server
+                submitters.append(member.display_name)
+            else:
+                # Alternative lookup through API if not in cache
+                try:
+                    member = await interaction.guild.fetch_member(user_id)
+                    submitters.append(member.display_name)
+                except discord.NotFound:
+                    print(f"User {user_id} not found in guild")
+                    continue
+        
+        if not submitters:
+            await interaction.response.send_message("No submissions yet!", ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                f"📝 Submitted ({len(submitters)}):\n" + ", ".join(submitters),
+                ephemeral=True
+            )
+            
+    except Exception as e:
+        print(f"Error in showsubmitted: {e}")
+        await interaction.response.send_message(
+            "Failed to check submissions. Please try again.",
+            ephemeral=True
+        )
+
+@bot.tree.command(name="showanswers", description="Reveal all anonymous messages")
+async def show_anon(interaction: discord.Interaction):
+    """Posts shuffled messages publicly"""
+    if not ACTIVE_SUBMISSIONS:
+        await interaction.response.send_message("No submissions yet!", ephemeral=True)
+        return
+    
+    # Shuffle and format messages
+    messages = list(ACTIVE_SUBMISSIONS.values())
+    random.shuffle(messages)
+    formatted = "\n".join(f"{i+1}. {msg}" for i, msg in enumerate(messages))
+    
+    # Send publicly
+    await interaction.response.send_message(f"🔍 Anonymous Messages:\n{formatted}")
+    ACTIVE_SUBMISSIONS.clear()  # Reset storage
 
 bot.run(os.getenv('DISCORD_TOKEN'))
