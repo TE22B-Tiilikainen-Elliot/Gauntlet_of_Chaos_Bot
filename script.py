@@ -429,36 +429,41 @@ async def anon_submit(interaction: discord.Interaction, message: str):
         ephemeral=True  # Only visible to the command user
     )
 
-@bot.tree.command(name="showsubmitted", description="Show who submitted")
+@bot.tree.command(name="showsubmitted", description="Show users who submitted")
 async def show_submitted(interaction: discord.Interaction):
-    """Working version that properly lists submitters"""
+    """Lists submitters using the same reliable method as showanswers"""
+    if not ACTIVE_SUBMISSIONS:
+        await interaction.response.send_message("No submissions yet!", ephemeral=True)
+        return
+    
     try:
-        submitters = []
+        # Same user lookup method that works in showanswers
+        submitter_info = []
         for user_id in ACTIVE_SUBMISSIONS.keys():
             member = interaction.guild.get_member(user_id)
-            if member is not None:  # User exists in server
-                submitters.append(member.display_name)
+            if member:
+                submitter_info.append(f"• {member.display_name}")
             else:
-                # Alternative lookup through API if not in cache
+                # Mirror the fallback from showanswers
                 try:
-                    member = await interaction.guild.fetch_member(user_id)
-                    submitters.append(member.display_name)
-                except discord.NotFound:
-                    print(f"User {user_id} not found in guild")
-                    continue
+                    user = await bot.fetch_user(user_id)
+                    submitter_info.append(f"• {user.name} (not in server)")
+                except:
+                    submitter_info.append(f"• Unknown User ({user_id})")
         
-        if not submitters:
-            await interaction.response.send_message("No submissions yet!", ephemeral=True)
-        else:
-            await interaction.response.send_message(
-                f"📝 Submitted ({len(submitters)}):\n" + ", ".join(submitters),
-                ephemeral=True
-            )
-            
+        # Format exactly like working commands
+        response = (
+            f"📝 Submitted ({len(submitter_info)}):\n" +
+            "\n".join(submitter_info)
+        )
+        
+        await interaction.response.send_message(response, ephemeral=True)
+        
     except Exception as e:
-        print(f"Error in showsubmitted: {e}")
+        error_msg = f"Error: {str(e)}"
+        print(f"showsubmitted error: {error_msg}")
         await interaction.response.send_message(
-            "Failed to check submissions. Please try again.",
+            f"⚠️ Couldn't check submissions. Error: {error_msg}",
             ephemeral=True
         )
 
@@ -486,7 +491,7 @@ async def show_anon(interaction: discord.Interaction):
         else:
             try:
                 user = await bot.fetch_user(user_id)  # Try global user lookup
-                admin_log.append(f"`{i}.` 👤 {user.name} (not in server)\n   ✉️ {msg}")
+                admin_log.append(f"`{i}.` 👤 {user.name}\n   ✉️ {msg}")
             except:
                 admin_log.append(f"`{i}.` 👤 Unknown User ({user_id})\n   ✉️ {msg}")
     
