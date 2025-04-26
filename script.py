@@ -462,20 +462,41 @@ async def show_submitted(interaction: discord.Interaction):
             ephemeral=True
         )
 
-@bot.tree.command(name="showanswers", description="Reveal all anonymous messages")
+@bot.tree.command(name="showanswers", description="Reveal anonymous messages")
 async def show_anon(interaction: discord.Interaction):
-    """Posts shuffled messages publicly"""
     if not ACTIVE_SUBMISSIONS:
-        await interaction.response.send_message("No submissions yet!", ephemeral=True)
+        await interaction.response.send_message("❌ No submissions yet!", ephemeral=True)
         return
     
-    # Shuffle and format messages
-    messages = list(ACTIVE_SUBMISSIONS.values())
-    random.shuffle(messages)
-    formatted = "\n".join(f"{i+1}. {msg}" for i, msg in enumerate(messages))
+    # 1. Create public anonymous display
+    shuffled_messages = list(ACTIVE_SUBMISSIONS.items())
+    random.shuffle(shuffled_messages)
     
-    # Send publicly
-    await interaction.response.send_message(f"🔍 Anonymous Messages:\n{formatted}")
-    ACTIVE_SUBMISSIONS.clear()  # Reset storage
+    public_output = "🔍 **Anonymous Messages** 🔍\n" + "\n".join(
+        f"`{i+1}.` {msg}" 
+        for i, (_, msg) in enumerate(shuffled_messages)
+    )
+    
+    # 2. Create detailed admin log
+    admin_log = ["📜 **Author Mapping** 📜"]
+    for i, (user_id, msg) in enumerate(shuffled_messages, 1):
+        member = interaction.guild.get_member(user_id)
+        if member:
+            admin_log.append(f"`{i}.` 👤 {member.display_name}\n   ✉️ {msg}")
+        else:
+            try:
+                user = await bot.fetch_user(user_id)  # Try global user lookup
+                admin_log.append(f"`{i}.` 👤 {user.name} (not in server)\n   ✉️ {msg}")
+            except:
+                admin_log.append(f"`{i}.` 👤 Unknown User ({user_id})\n   ✉️ {msg}")
+    
+    # 3. Send both versions
+    await interaction.response.send_message(public_output)
+    await interaction.followup.send(
+        "\n".join(admin_log),
+        ephemeral=True
+    )
+    
+    ACTIVE_SUBMISSIONS.clear()
 
 bot.run(os.getenv('DISCORD_TOKEN'))
